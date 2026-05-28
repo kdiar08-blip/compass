@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grocery Finder — Astana</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c0f;
+    --panel: #111418;
+    --border: #1e2430;
+    --accent: #e8c84a;
+    --accent2: #4ae8c8;
+    --red: #e84a4a;
+    --text: #d4dce8;
+    --muted: #5a6477;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px 40px;
+    overflow-x: hidden;
+  }
+
+  /* Noise texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 32px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(2rem, 8vw, 3.5rem);
+    letter-spacing: 0.12em;
+    color: var(--accent);
+    line-height: 1;
+  }
+
+  .subtitle {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--muted);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+
+  /* Compass wrapper */
+  .compass-section {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .compass-outer {
+    position: relative;
+    width: 280px;
+    height: 280px;
+    border-radius: 50%;
+    transition: box-shadow 0.3s ease;
+  }
+
+  /* Lock-on glow when phone points at the store */
+  .compass-outer.locked {
+    box-shadow: 0 0 40px rgba(74,232,200,0.5), 0 0 80px rgba(74,232,200,0.25);
+  }
+
+  /* Rotating ring with tick marks */
+  .compass-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    transition: transform 0.3s ease;
+  }
+
+  /* SVG compass face */
+  .compass-svg {
+    width: 100%;
+    height: 100%;
+    filter: drop-shadow(0 0 20px rgba(232,200,74,0.08));
+  }
+
+  /* Dial rotates so N points to real north */
+  .compass-svg {
+    transition: none;
+    will-change: transform;
+  }
+
+  /* Fixed pointer at top = where the phone is facing */
+  .phone-indicator {
+    position: absolute;
+    top: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: var(--accent);
+    font-size: 1.6rem;
+    line-height: 1;
+    z-index: 5;
+    filter: drop-shadow(0 0 6px rgba(232,200,74,0.7));
+  }
+
+  /* Store direction needle */
+  .store-needle {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    transition: none;
+    will-change: transform;
+    z-index: 3;
+    pointer-events: none;
+  }
+
+  .store-needle-arrow {
+    width: 0;
+    height: 0;
+    border-left: 9px solid transparent;
+    border-right: 9px solid transparent;
+    border-bottom: 44px solid var(--accent2);
+    filter: drop-shadow(0 0 10px rgba(74,232,200,0.7));
+    transition: filter 0.3s ease;
+    margin-bottom: 130px; /* pushes arrow up into the rim, clearing center */
+  }
+
+  .compass-outer.locked .store-needle-arrow {
+    filter: drop-shadow(0 0 18px rgba(74,232,200,1));
+  }
+
+  .compass-outer.locked .phone-indicator {
+    color: var(--accent2);
+    filter: drop-shadow(0 0 10px rgba(74,232,200,1));
+  }
+
+  .store-needle-tail {
+    display: none;
+  }
+
+  .needle-hub {
+    display: none;
+  }
+
+  /* Glowing dot on the rim showing store direction */
+  .store-dot {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 14px; height: 14px;
+    margin: -7px 0 0 -7px;
+    border-radius: 50%;
+    background: var(--accent2);
+    box-shadow: 0 0 12px var(--accent2);
+    z-index: 6;
+    will-change: transform;
+  }
+
+  /* Center distance readout, inside the dial */
+  .center-readout {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    z-index: 2;
+    pointer-events: none;
+    width: 120px;
+  }
+
+  .center-dist {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2.4rem;
+    color: var(--text);
+    line-height: 0.9;
+    letter-spacing: 0.03em;
+  }
+
+  .center-lock {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-top: 4px;
+    height: 12px;
+    transition: color 0.3s ease;
+  }
+
+  .compass-outer.locked .center-lock {
+    color: var(--accent2);
+  }
+
+  .compass-outer.locked .center-dist {
+    color: var(--accent2);
+  }
+
+  /* Status badge */
+  .status-badge {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.15em;
+    padding: 4px 12px;
+    border-radius: 2px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  .status-badge.active { color: var(--accent2); border-color: var(--accent2); }
+  .status-badge.error { color: var(--red); border-color: var(--red); }
+
+  .dist-display {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--accent2);
+    letter-spacing: 0.1em;
+    margin-bottom: 4px;
+  }
+
+  /* Bearing display */
+  .bearing-display {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 4rem;
+    color: var(--text);
+    letter-spacing: 0.05em;
+    line-height: 1;
+    text-align: center;
+  }
+
+  .bearing-display span {
+    font-size: 1.5rem;
+    color: var(--muted);
+  }
+
+  /* Store cards */
+  .stores-section {
+    width: 100%;
+    max-width: 420px;
+    position: relative;
+    z-index: 1;
+    margin-top: 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .section-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    padding-left: 2px;
+  }
+
+  .store-empty {
+    background: var(--panel);
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+    padding: 18px 16px;
+    text-align: center;
+    color: var(--muted);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
+  }
+
+  .store-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .store-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--border);
+    transition: background 0.2s;
+  }
+
+  .store-card.active::before { background: var(--accent); }
+  .store-card.active { border-color: rgba(232,200,74,0.3); }
+
+  .store-card:hover { border-color: rgba(232,200,74,0.2); transform: translateX(2px); }
+
+  .store-rank {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2rem;
+    color: var(--muted);
+    width: 28px;
+    text-align: center;
+    flex-shrink: 0;
+    line-height: 1;
+  }
+
+  .store-card.active .store-rank { color: var(--accent); }
+
+  .store-info { flex: 1; min-width: 0; }
+
+  .store-name {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-weight: 500;
+    font-size: 0.9rem;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .store-address {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.62rem;
+    color: var(--muted);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .store-meta {
+    display: flex;
+    gap: 8px;
+    margin-top: 5px;
+    align-items: center;
+  }
+
+  .store-dist {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  .store-rating {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+  }
+
+  .store-arrow {
+    font-size: 1.2rem;
+    flex-shrink: 0;
+    transition: transform 0.3s;
+    opacity: 0.5;
+  }
+
+  .store-card.active .store-arrow { opacity: 1; }
+
+  /* Target dot on compass for store direction */
+  .target-dot {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: var(--accent2);
+    border-radius: 50%;
+    border: 2px solid var(--bg);
+    box-shadow: 0 0 8px var(--accent2);
+    top: 50%;
+    left: 50%;
+    transform-origin: center center;
+    transition: all 0.5s ease;
+    pointer-events: none;
+  }
+
+  /* Grid lines */
+  .grid-line {
+    position: fixed;
+    background: var(--border);
+    opacity: 0.3;
+  }
+
+  .allow-btn {
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    padding: 10px 24px;
+    cursor: pointer;
+    font-weight: 500;
+    text-transform: uppercase;
+    margin-top: 8px;
+    transition: opacity 0.2s;
+  }
+
+  .allow-btn:hover { opacity: 0.85; }
+
+  .coords {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    text-align: center;
+    margin-top: 4px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Decorative grid lines -->
+<div class="grid-line" style="top:0;bottom:0;left:20%;width:1px;"></div>
+<div class="grid-line" style="top:0;bottom:0;right:20%;width:1px;"></div>
+
+<header>
+  <div class="subtitle">Nearest Grocery Store</div>
+</header>
+
+<div class="compass-section">
+  <div class="compass-outer">
+    <svg class="compass-svg" id="dial" viewBox="0 0 280 280" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- Outer ring -->
+      <circle cx="140" cy="140" r="136" stroke="#1e2430" stroke-width="1.5"/>
+      <circle cx="140" cy="140" r="128" stroke="#1e2430" stroke-width="0.5" stroke-dasharray="2 4"/>
+
+      <!-- Degree ticks -->
+      <g id="ticks" stroke="#2a3244" stroke-width="1">
+        <!-- Generated by script below -->
+      </g>
+
+      <!-- Cardinal labels -->
+      <text x="140" y="20" text-anchor="middle" font-family="'Bebas Neue', sans-serif" font-size="18" fill="#e84a4a" letter-spacing="1">N</text>
+      <text x="140" y="270" text-anchor="middle" font-family="'Bebas Neue', sans-serif" font-size="16" fill="#5a6477" letter-spacing="1">S</text>
+      <text x="270" y="145" text-anchor="middle" font-family="'Bebas Neue', sans-serif" font-size="16" fill="#5a6477" letter-spacing="1">E</text>
+      <text x="10" y="145" text-anchor="middle" font-family="'Bebas Neue', sans-serif" font-size="16" fill="#5a6477" letter-spacing="1">W</text>
+
+      <!-- Inner circle -->
+      <circle cx="140" cy="140" r="90" stroke="#1e2430" stroke-width="1"/>
+      <circle cx="140" cy="140" r="60" stroke="#1a2030" stroke-width="0.5" stroke-dasharray="3 6"/>
+
+      <!-- Crosshair lines -->
+      <line x1="140" y1="10" x2="140" y2="50" stroke="#1e2430" stroke-width="0.5"/>
+      <line x1="140" y1="230" x2="140" y2="270" stroke="#1e2430" stroke-width="0.5"/>
+      <line x1="10" y1="140" x2="50" y2="140" stroke="#1e2430" stroke-width="0.5"/>
+      <line x1="230" y1="140" x2="270" y2="140" stroke="#1e2430" stroke-width="0.5"/>
+
+      <!-- Degree marks (every 10°) -->
+      <g stroke="#2a3244" stroke-width="1">
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(10,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(20,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(30,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(40,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(50,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(60,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(70,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(80,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(90,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(100,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(110,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(120,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(130,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(140,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(150,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(160,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(170,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(180,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(190,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(200,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(210,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(220,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(230,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(240,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(250,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(260,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(270,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(280,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(290,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(300,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(310,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(320,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(330,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(340,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="22" transform="rotate(350,140,140)"/>
+      </g>
+
+      <!-- Longer major ticks at 45° -->
+      <g stroke="#3a4560" stroke-width="1.5">
+        <line x1="140" y1="12" x2="140" y2="30" transform="rotate(45,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="30" transform="rotate(135,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="30" transform="rotate(225,140,140)"/>
+        <line x1="140" y1="12" x2="140" y2="30" transform="rotate(315,140,140)"/>
+      </g>
+
+      <!-- Store direction dot track -->
+      <circle cx="140" cy="140" r="105" stroke="#1e2430" stroke-width="1" stroke-dasharray="1 3"/>
+    </svg>
+
+    <!-- Fixed pointer at top = direction your phone is facing -->
+    <div class="phone-indicator">▲</div>
+
+    <!-- Store direction arrow (rotates relative to dial) -->
+    <div class="store-needle" id="storeNeedle">
+      <div class="store-needle-arrow"></div>
+      <div class="store-needle-tail"></div>
+    </div>
+
+    <!-- Glowing dot on the rim marking the store direction -->
+    <div class="store-dot" id="storeDot"></div>
+
+    <!-- Center distance readout -->
+    <div class="center-readout">
+      <div class="center-dist" id="centerDist">—</div>
+      <div class="center-lock" id="centerLock"></div>
+    </div>
+
+    <div class="needle-hub"></div>
+  </div>
+
+  <div class="bearing-display" id="bearingDisplay">—<span>°</span></div>
+  <div class="dist-display" id="distDisplay"></div>
+  <div class="status-badge" id="statusBadge">Requesting location…</div>
+  <div class="coords" id="coordsDisplay"></div>
+  <button class="allow-btn" id="orientBtn" style="display:none" onclick="requestOrientation()">
+    📡 TAP TO ACTIVATE COMPASS
+  </button>
+  <div class="coords" id="debugDisplay" style="margin-top:8px;font-size:0.58rem;line-height:1.5;"></div>
+</div>
+
+<div class="stores-section">
+  <div class="section-label">Nearby Grocery Stores</div>
+  <div id="storeList"></div>
+</div>
+
+<script>
+// Stores are loaded live from OpenStreetMap (Overpass API) around the
+// user's GPS position. Starts empty; populated after location is found.
+let STORES = [];
+let storesLoaded = false;
+
+let userLat = null, userLng = null;
+let compassHeading = 0;
+let selectedStore = 0;
+let deviceHeading = 0;
+let watchId = null;
+
+function toRad(deg) { return deg * Math.PI / 180; }
+function toDeg(rad) { return rad * 180 / Math.PI; }
+
+function haversine(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function bearing(lat1, lng1, lat2, lng2) {
+  const dLng = toRad(lng2 - lng1);
+  const y = Math.sin(dLng) * Math.cos(toRad(lat2));
+  const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLng);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+
+function formatDist(m) {
+  return m < 1000 ? `${Math.round(m)}m` : `${(m/1000).toFixed(1)}km`;
+}
+
+function dirArrow(deg) {
+  const dirs = ['↑','↗','→','↘','↓','↙','←','↖'];
+  return dirs[Math.round(deg / 45) % 8];
+}
+
+function getSortedStores() {
+  if (userLat === null) return STORES.map((s,i) => ({...s, dist: null, bearing: null, idx: i}));
+  return STORES.map((s, i) => ({
+    ...s,
+    dist: haversine(userLat, userLng, s.lat, s.lng),
+    bearing: bearing(userLat, userLng, s.lat, s.lng),
+    idx: i
+  })).sort((a,b) => a.dist - b.dist);
+}
+
+// Mirror servers — if one is busy/down we try the next.
+const OVERPASS_SERVERS = [
+  "https://overpass-api.de/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+  "https://maps.mail.ru/osm/tools/overpass/api/interpreter"
+];
+
+function parseOverpass(data) {
+  return (data.elements || []).map(el => {
+    const lat = el.lat != null ? el.lat : (el.center && el.center.lat);
+    const lon = el.lon != null ? el.lon : (el.center && el.center.lon);
+    if (lat == null || lon == null) return null;
+    const t = el.tags || {};
+    const typeName = { supermarket: "Supermarket", convenience: "Convenience Store", grocery: "Grocery Store" };
+    const name = t.name || t["name:en"] || typeName[t.shop] || "Store";
+    const addr = [t["addr:street"], t["addr:housenumber"]].filter(Boolean).join(" ")
+      || (t.shop ? t.shop.charAt(0).toUpperCase() + t.shop.slice(1) : "Grocery");
+    return { name, address: addr, lat, lng: lon };
+  }).filter(Boolean);
+}
+
+function buildQuery(lat, lng, radius) {
+  // Fetch up to 200 so the genuine nearest is never excluded in dense areas.
+  return `[out:json][timeout:25];
+(
+  node["shop"~"supermarket|convenience|grocery|general|greengrocer"](around:${radius},${lat},${lng});
+  way["shop"~"supermarket|convenience|grocery|general|greengrocer"](around:${radius},${lat},${lng});
+);
+out center 200;`;
+}
+
+async function fetchOverpass(query) {
+  // Try each mirror until one responds successfully.
+  for (const server of OVERPASS_SERVERS) {
+    try {
+      const res = await fetch(server, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: "data=" + encodeURIComponent(query)
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      return parseOverpass(data);   // could be [] — that's a valid "none here"
+    } catch (e) {
+      // network/parse error on this mirror — try the next
+    }
+  }
+  return null; // every mirror failed
+}
+
+async function loadStores(lat, lng) {
+  // Escalate the search radius until we find stores. This makes the app
+  // work the same everywhere — city centre or sparse outskirts.
+  const radii = [1500, 4000, 10000, 25000];
+  let lastResult = null;
+  for (const radius of radii) {
+    const stores = await fetchOverpass(buildQuery(lat, lng, radius));
+    if (stores === null) {
+      lastResult = null;            // all servers down at this radius
+      continue;                     // retry at next radius anyway
+    }
+    if (stores.length > 0) return stores;
+    lastResult = [];                // servers worked but nothing in range yet
+  }
+  return lastResult;                // [] = genuinely nothing found; null = servers failed
+}
+
+async function refreshStores() {
+  if (userLat === null) return;
+  setStatus("Finding grocery stores…");
+  const found = await loadStores(userLat, userLng);
+  if (found === null) {
+    setStatus("Couldn't load stores — tap to retry", "error");
+    storesLoaded = false;
+    return;
+  }
+  STORES = found;
+  storesLoaded = true;
+  selectedStore = 0;
+  if (STORES.length === 0) {
+    setStatus("No grocery stores found nearby", "error");
+  } else {
+    // Pre-sort by distance and keep the nearest 12 for a clean list.
+    const sorted = found.map(s => ({
+      ...s, _d: haversine(userLat, userLng, s.lat, s.lng)
+    })).sort((a, b) => a._d - b._d).slice(0, 12).map(({_d, ...s}) => s);
+    STORES = sorted;
+    setStatus(`${STORES.length} store${STORES.length > 1 ? 's' : ''} nearby`, "active");
+  }
+  renderStores();
+  updateCompass();
+}
+
+function renderStores() {
+  const sorted = getSortedStores();
+  const list = document.getElementById('storeList');
+  list.innerHTML = '';
+  if (sorted.length === 0) {
+    const msg = document.createElement('div');
+    msg.className = 'store-empty';
+    msg.textContent = storesLoaded ? 'No grocery stores found nearby.' : 'Searching for nearby stores…';
+    list.appendChild(msg);
+    return sorted;
+  }
+  sorted.forEach((store, rank) => {
+    const isActive = rank === selectedStore;
+    const card = document.createElement('div');
+    card.className = `store-card${isActive ? ' active' : ''}`;
+    card.innerHTML = `
+      <div class="store-rank">${rank + 1}</div>
+      <div class="store-info">
+        <div class="store-name">${store.name}</div>
+        <div class="store-address">${store.address}</div>
+        <div class="store-meta">
+          <span class="store-dist">${store.dist !== null ? formatDist(store.dist) : '—'}</span>
+          ${store.bearing !== null ? `<span class="store-rating">${dirArrow(store.bearing)} ${Math.round(store.bearing)}°</span>` : ''}
+        </div>
+      </div>
+      <div class="store-arrow">${store.bearing !== null ? dirArrow(store.bearing) : '→'}</div>
+    `;
+    card.addEventListener('click', () => {
+      selectedStore = rank;
+      updateCompass();
+      renderStores();
+    });
+    list.appendChild(card);
+  });
+  return sorted;
+}
+
+// Track continuous (unwrapped) rotation so the dial/needle always
+// take the shortest path and never spin the long way around 0/360.
+let dialAngle = 0;
+let needleAngle = 0;
+function shortestStep(currentContinuous, targetMod360) {
+  let diff = targetMod360 - (currentContinuous % 360);
+  while (diff > 180) diff -= 360;
+  while (diff < -180) diff += 360;
+  return currentContinuous + diff;
+}
+
+function angleDiff(a, b) {
+  let d = Math.abs(a - b) % 360;
+  return d > 180 ? 360 - d : d;
+}
+
+const LOCK_THRESHOLD = 12; // degrees within which we count as "pointing at store"
+let isLocked = false;
+let lastCenterDist = '';
+
+function updateCompass() {
+  const sorted = getSortedStores();
+  const store = sorted[selectedStore];
+  const dial = document.getElementById('dial');
+  const storeNeedle = document.getElementById('storeNeedle');
+  const storeDot = document.getElementById('storeDot');
+  const bearingDisplay = document.getElementById('bearingDisplay');
+  const distDisplay = document.getElementById('distDisplay');
+  const centerDist = document.getElementById('centerDist');
+  const centerLock = document.getElementById('centerLock');
+  const outer = document.querySelector('.compass-outer');
+
+  // Rotate the dial so North aligns with real-world north.
+  dialAngle = shortestStep(dialAngle, (-deviceHeading + 360) % 360);
+  dial.style.transform = `rotate(${dialAngle}deg)`;
+
+  if (store && store.bearing !== null) {
+    // Relative angle of store from where the phone points (0 = straight ahead)
+    const relative = (store.bearing - deviceHeading + 360) % 360;
+    needleAngle = shortestStep(needleAngle, relative);
+    storeNeedle.style.transform = `rotate(${needleAngle}deg)`;
+
+    // Position the glowing store dot on the rim at the relative angle.
+    // 0deg = top. Convert to x/y on a circle of radius 116.
+    const r = 116;
+    const rad = (relative - 90) * Math.PI / 180;
+    const x = Math.cos(rad) * r;
+    const y = Math.sin(rad) * r;
+    storeDot.style.transform = `translate(${x}px, ${y}px)`;
+
+    // Lock-on detection with hysteresis to avoid flicker at the boundary
+    const off = angleDiff(deviceHeading, store.bearing);
+    if (!isLocked && off < LOCK_THRESHOLD) isLocked = true;
+    else if (isLocked && off > LOCK_THRESHOLD + 6) isLocked = false;
+    outer.classList.toggle('locked', isLocked);
+    centerLock.textContent = isLocked ? '● ON TARGET' : '';
+
+    // Bearing text — only repaint on change
+    const deg = Math.round(store.bearing);
+    if (deg !== lastShownDeg) {
+      bearingDisplay.innerHTML = `${deg}<span>°</span>`;
+      lastShownDeg = deg;
+    }
+
+    // Live distance — center (big) + subtitle
+    if (store.dist !== null) {
+      const dStr = formatDist(store.dist);
+      if (dStr !== lastCenterDist) {
+        centerDist.textContent = dStr;
+        lastCenterDist = dStr;
+      }
+      distDisplay.textContent = store.name;
+    }
+  } else {
+    // No store selected/available — neutral state
+    document.querySelector('.compass-outer').classList.remove('locked');
+    document.getElementById('storeDot').style.transform = 'translate(0,-116px)';
+    document.getElementById('centerLock').textContent = '';
+    if (lastCenterDist !== '—') {
+      document.getElementById('centerDist').textContent = '—';
+      lastCenterDist = '—';
+    }
+  }
+}
+
+function setStatus(msg, type = '') {
+  const badge = document.getElementById('statusBadge');
+  badge.textContent = msg;
+  badge.className = `status-badge${type ? ' ' + type : ''}`;
+  badge.style.cursor = type === 'error' ? 'pointer' : 'default';
+  // On error, tapping retries: location if we have no fix, else store search.
+  badge.onclick = (type === 'error')
+    ? () => { if (userLat === null) pollOnce(); else refreshStores(); }
+    : null;
+}
+
+// Geolocation — actively poll a FRESH fix on a timer instead of trusting
+// watchPosition (which iOS often serves stale cached fixes for).
+let lastStoreSearchLat = null, lastStoreSearchLng = null;
+let pollTimer = null;
+
+function onPosition(pos) {
+  userLat = pos.coords.latitude;
+  userLng = pos.coords.longitude;
+  const acc = Math.round(pos.coords.accuracy);
+  document.getElementById('coordsDisplay').textContent =
+    `${userLat.toFixed(5)}, ${userLng.toFixed(5)} · ±${acc}m · ${new Date().toLocaleTimeString()}`;
+  renderStores();
+  updateCompass();
+
+  // Load stores on first fix, then re-search only if we've moved >300m
+  // (avoids hammering Overpass while still keeping the list relevant).
+  if (!storesLoaded) {
+    refreshStores();
+    lastStoreSearchLat = userLat; lastStoreSearchLng = userLng;
+  } else if (lastStoreSearchLat !== null) {
+    const moved = haversine(userLat, userLng, lastStoreSearchLat, lastStoreSearchLng);
+    if (moved > 300) {
+      refreshStores();
+      lastStoreSearchLat = userLat; lastStoreSearchLng = userLng;
+    }
+  }
+}
+
+function onPositionError(err) {
+  if (userLat === null) {
+    setStatus('Location blocked — tap to retry', 'error');
+    document.getElementById('coordsDisplay').textContent =
+      'Enable Location for Safari in iOS Settings, then tap status.';
+  }
+}
+
+function pollOnce() {
+  navigator.geolocation.getCurrentPosition(
+    onPosition, onPositionError,
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+  );
+}
+
+function startLocation() {
+  if (!navigator.geolocation) {
+    setStatus('Geolocation not supported', 'error');
+    return;
+  }
+  setStatus('Locating…');
+  pollOnce();                       // immediate first fix
+  pollTimer = setInterval(pollOnce, 3000);  // fresh fix every 3s
+  // watchPosition as a secondary stream for fast movement updates
+  watchId = navigator.geolocation.watchPosition(
+    onPosition, onPositionError,
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+  );
+}
+
+// Sensor stores the latest raw reading; a rAF loop does the smoothing
+// and rendering exactly once per frame. This prevents event pile-up,
+// which is the real source of lag.
+let rawHeading = null;
+let smoothHeading = null;
+let usingAbsolute = false;
+let lastEventType = '';
+
+function applyHeading(heading, source) {
+  rawHeading = heading;
+  lastEventType = source;
+}
+
+// Dedicated handler for the ABSOLUTE event (Android true-north)
+function handleAbsolute(e) {
+  if (e.alpha === null) return;
+  usingAbsolute = true;
+  applyHeading((360 - e.alpha) % 360, 'absolute');
+}
+
+// Handler for iOS (webkitCompassHeading) and relative fallback
+function handleOrientation(e) {
+  if (typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading)) {
+    applyHeading(e.webkitCompassHeading, 'ios');
+    return;
+  }
+  if (usingAbsolute) return;
+  if (e.alpha === null) return;
+  applyHeading((360 - e.alpha) % 360, e.absolute ? 'rel(abs)' : 'relative');
+}
+
+// Single render loop — runs at the screen's refresh rate
+let lastDebugTime = 0;
+let lastShownDeg = null;
+function renderLoop() {
+  if (rawHeading !== null) {
+    // Smooth toward the raw reading
+    if (smoothHeading === null) {
+      smoothHeading = rawHeading;
+    } else {
+      let diff = rawHeading - smoothHeading;
+      while (diff > 180) diff -= 360;
+      while (diff < -180) diff += 360;
+      smoothHeading = (smoothHeading + diff * 0.25 + 360) % 360;
+    }
+    deviceHeading = smoothHeading;
+    updateCompass();
+
+    const now = Date.now();
+    if (now - lastDebugTime > 250) {
+      updateDebug(rawHeading);
+      lastDebugTime = now;
+    }
+  }
+  requestAnimationFrame(renderLoop);
+}
+requestAnimationFrame(renderLoop);
+
+function updateDebug(raw) {
+  const d = document.getElementById('debugDisplay');
+  const secure = window.isSecureContext ? 'secure ✓' : 'NOT secure ✗ (need https)';
+  d.innerHTML = `src: ${lastEventType} · raw: ${raw.toFixed(0)}° · heading: ${deviceHeading.toFixed(0)}°<br>${secure}`;
+}
+
+function requestOrientation() {
+  const btn = document.getElementById('orientBtn');
+  if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+    DeviceOrientationEvent.requestPermission()
+      .then(perm => {
+        if (perm === 'granted') {
+          window.addEventListener('deviceorientation', handleOrientation, true);
+          btn.style.display = 'none';
+          setStatus('Compass active', 'active');
+        } else {
+          btn.textContent = '⛔ Permission denied';
+          setStatus('Orientation denied', 'error');
+        }
+      })
+      .catch(() => { btn.textContent = '⛔ Error — try again'; });
+  } else {
+    attachAndroid();
+    btn.style.display = 'none';
+    setStatus('Compass active', 'active');
+  }
+}
+
+function attachAndroid() {
+  // Absolute first (true north). Relative only as a backup if absolute never fires.
+  window.addEventListener('deviceorientationabsolute', handleAbsolute, true);
+  window.addEventListener('deviceorientation', handleOrientation, true);
+}
+
+function startOrientation() {
+  if (!window.DeviceOrientationEvent) {
+    setStatus('No orientation sensor', 'error');
+    document.getElementById('debugDisplay').textContent = 'DeviceOrientationEvent unavailable';
+    return;
+  }
+  if (!window.isSecureContext) {
+    setStatus('Needs HTTPS for compass', 'error');
+  }
+  if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+    document.getElementById('orientBtn').style.display = 'inline-block';
+    setStatus('Tap button to enable compass', '');
+  } else {
+    attachAndroid();
+    setStatus('Compass active', 'active');
+  }
+}
+
+// Init
+renderStores();
+startLocation();
+startOrientation();
+</script>
+</body>
+</html>
